@@ -5,12 +5,14 @@ from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import AirportSuggestion, SearchRequest, SearchResponse
-from app.providers.mock_provider import MockFlightProvider
+from app.providers.factory import create_flight_provider
 from app.services.airport_service import AirportExpansionService
 from app.services.currency_service import CurrencyService
 from app.services.search_service import FlightSearchService
 from app.services.sort_service import SortService
+from app.settings import get_settings
 
+settings = get_settings()
 
 app = FastAPI(
     title="Flight Search MVP API",
@@ -20,7 +22,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,7 +33,7 @@ currency_service = CurrencyService()
 sort_service = SortService()
 
 search_service = FlightSearchService(
-    provider=MockFlightProvider(),
+    provider=create_flight_provider(settings),
     airport_service=airport_service,
     currency_service=currency_service,
     sort_service=sort_service,
@@ -40,7 +42,12 @@ search_service = FlightSearchService(
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "environment": settings.environment,
+        "configured_provider": settings.flight_provider,
+        "active_provider": search_service.provider_name,
+    }
 
 
 @app.get("/airport-suggestions", response_model=list[AirportSuggestion])

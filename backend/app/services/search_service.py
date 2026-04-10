@@ -5,7 +5,7 @@ from itertools import product
 from fastapi import HTTPException, status
 
 from app.models import FlightOffer, RouteResult, SearchRequest, SearchResponse
-from app.providers.flight_provider import FlightProvider
+from app.providers.flight_provider import FlightProvider, FlightProviderError
 from app.services.airport_service import AirportExpansionService, UnknownCityError
 from app.services.currency_service import CurrencyService, UnsupportedCurrencyError
 from app.services.sort_service import SortService
@@ -24,6 +24,10 @@ class FlightSearchService:
         self._currency_service = currency_service
         self._sort_service = sort_service
 
+    @property
+    def provider_name(self) -> str:
+        return self._provider.provider_name
+
     def search(self, request: SearchRequest) -> SearchResponse:
         try:
             expanded_origins = self._airport_service.expand(request.normalized_origin_city)
@@ -41,53 +45,64 @@ class FlightSearchService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
+        except FlightProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            ) from exc
 
         route_results: list[RouteResult] = []
         all_offers: list[FlightOffer] = []
 
-        for origin_airport in expanded_origins:
-            for destination_airport in expanded_destinations:
-                outbound_options = self._provider.search_one_way(
-                    request, origin_airport, destination_airport
-                )
-
-                if request.trip_type == "round_trip":
-                    return_options = self._provider.search_one_way(
-                        request, destination_airport, origin_airport
-                    )
-                    hydrated_offers = self._build_round_trip_offers(
-                        request=request,
-                        origin_airport=origin_airport,
-                        destination_airport=destination_airport,
-                        outbound_options=outbound_options,
-                        return_options=return_options,
-                    )
-                else:
-                    hydrated_offers = self._build_one_way_offers(
-                        request=request,
-                        direction="outbound",
-                        raw_offers=outbound_options,
+        try:
+            for origin_airport in expanded_origins:
+                for destination_airport in expanded_destinations:
+                    outbound_options = self._provider.search_one_way(
+                        request, origin_airport, destination_airport
                     )
 
-                for offer in hydrated_offers:
-                    offer.display_currency = display_currency
-                    offer.display_price = self._currency_service.convert(
-                        amount=offer.original_price,
-                        source_currency=offer.original_currency,
-                        target_currency=display_currency,
-                    )
+                    if request.trip_type == "round_trip":
+                        return_options = self._provider.search_one_way(
+                            request, destination_airport, origin_airport
+                        )
+                        hydrated_offers = self._build_round_trip_offers(
+                            request=request,
+                            origin_airport=origin_airport,
+                            destination_airport=destination_airport,
+                            outbound_options=outbound_options,
+                            return_options=return_options,
+                        )
+                    else:
+                        hydrated_offers = self._build_one_way_offers(
+                            request=request,
+                            direction="outbound",
+                            raw_offers=outbound_options,
+                        )
 
-                hydrated_offers = self._sort_service.rank(hydrated_offers, request.sort_mode)
+                    for offer in hydrated_offers:
+                        offer.display_currency = display_currency
+                        offer.display_price = self._currency_service.convert(
+                            amount=offer.original_price,
+                            source_currency=offer.original_currency,
+                            target_currency=display_currency,
+                        )
 
-                route_results.append(
-                    RouteResult(
-                        route_key=f"{origin_airport}-{destination_airport}",
-                        origin_airport=origin_airport,
-                        destination_airport=destination_airport,
-                        offers=hydrated_offers,
+                    hydrated_offers = self._sort_service.rank(hydrated_offers, request.sort_mode)
+
+                    route_results.append(
+                        RouteResult(
+                            route_key=f"{origin_airport}-{destination_airport}",
+                            origin_airport=origin_airport,
+                            destination_airport=destination_airport,
+                            offers=hydrated_offers,
+                        )
                     )
-                )
-                all_offers.extend(hydrated_offers)
+                    all_offers.extend(hydrated_offers)
+        except FlightProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            ) from exc
 
         sorted_offers = self._sort_service.rank(all_offers, request.sort_mode)
         if sorted_offers:

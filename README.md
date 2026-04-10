@@ -6,14 +6,14 @@
 
 1. 自動把城市展開成多個候選機場
 2. 搜尋所有機場組合
-3. 將 mock provider 回傳的價格轉成指定幣別
+3. 將 provider 回傳的價格轉成指定幣別
 4. 依照排序規則回傳最便宜 / 最短 / 綜合最佳結果
 
 目前版本使用：
 
 - Frontend: React + Vite + TypeScript
 - Backend: FastAPI
-- Flight data: Mock provider
+- Flight data: Mock provider / Amadeus provider
 - Exchange rate: Mock currency service
 - Airport catalog: OpenFlights global airport dataset
 
@@ -25,7 +25,7 @@
 - 最便宜方案帶有 `Best Price` 標籤
 - 支援中文城市別名，例如 `武漢`、`台北`
 - 支援全球城市 / 機場 autocomplete，可輸入城市、機場名稱或 IATA code
-- 架構保留未來接真實 flight API 的空間
+- 已預留真實 flight API 切換機制
 
 ## 專案結構
 
@@ -79,11 +79,21 @@ flight-search-mvp/
 
 ### 目前仍是 Mock
 
-- 真實航班資料
-- 真實購票連結
-- 即時匯率 API
-- 真實城市地理擴展演算法
-- 真實航空公司票價與 availability
+- 如果 `FLIGHT_PROVIDER=mock`，航班資料、時間、價格都仍是 mock / synthetic
+- 即使切到 `FLIGHT_PROVIDER=amadeus`，匯率目前仍是 mock exchange rate
+- 真實購票 deep link 目前尚未接入
+- 真實城市地理擴展演算法仍是簡化版
+
+### 已支援真實 Flight API 骨架
+
+- `AmadeusFlightProvider` 已加入 backend
+- 可透過環境變數切換：
+  - `FLIGHT_PROVIDER=mock`
+  - `FLIGHT_PROVIDER=amadeus`
+  - `FLIGHT_PROVIDER=auto`
+- `auto` 模式下：
+  - 若有 Amadeus 金鑰，優先查真實資料
+  - 若 Amadeus 失敗，會 fallback 到 mock
 
 ## 快速啟動
 
@@ -101,6 +111,24 @@ flight-search-mvp/
 cp .env.example .env
 ```
 
+如果你要啟用真實航班資料，請先到 [Amadeus for Developers](https://developers.amadeus.com/) 申請 API Key，然後把 `.env` 補上：
+
+```bash
+FLIGHT_PROVIDER=amadeus
+AMADEUS_CLIENT_ID=your_client_id
+AMADEUS_CLIENT_SECRET=your_client_secret
+AMADEUS_BASE_URL=https://test.api.amadeus.com
+AMADEUS_TIMEOUT_SECONDS=15
+```
+
+如果你想保守一點，建議先用：
+
+```bash
+FLIGHT_PROVIDER=auto
+```
+
+這樣有金鑰時會查 Amadeus，沒有金鑰或遠端失敗時則回退到 mock。
+
 ## 2. 啟動 Backend
 
 ```bash
@@ -116,6 +144,58 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Health check: [http://localhost:8000/health](http://localhost:8000/health)
 
+`/health` 現在會額外回傳：
+
+- `configured_provider`: 你設定的 provider 模式
+- `active_provider`: 目前實際在跑的 provider 名稱
+
+例如：
+
+```json
+{
+  "status": "ok",
+  "environment": "development",
+  "configured_provider": "amadeus",
+  "active_provider": "amadeus_test"
+}
+```
+
+## Backend 部署準備
+
+這個專案現在已經補好比較適合雲端平台的設定：
+
+- 使用 `PORT` 或 `BACKEND_PORT` 啟動
+- `CORS_ALLOW_ORIGINS` 可用環境變數控制
+- [backend/Procfile](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/Procfile) 可直接給部分平台使用
+
+建議的 backend 環境變數：
+
+```bash
+APP_ENV=production
+CORS_ALLOW_ORIGINS=https://your-frontend-domain.vercel.app
+FLIGHT_PROVIDER=amadeus
+AMADEUS_CLIENT_ID=your_client_id
+AMADEUS_CLIENT_SECRET=your_client_secret
+```
+
+如果平台要你手動填 Start Command，請用：
+
+```bash
+cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+如果平台支援 Root Directory，請設成：
+
+```bash
+backend
+```
+
+安裝指令：
+
+```bash
+pip install -r requirements.txt
+```
+
 ## 3. 啟動 Frontend
 
 開新終端機：
@@ -129,6 +209,17 @@ npm run dev
 打開：
 
 - Frontend: [http://localhost:5173](http://localhost:5173)
+
+## 部署順序建議
+
+如果要給同事共用，建議這樣做：
+
+1. 先部署 backend
+2. 取得 backend 網址，例如 `https://flight-search-api.onrender.com`
+3. 把 frontend 的 `VITE_API_BASE_URL` 設成這個網址
+4. 再部署 frontend
+
+這樣前端才會打到正確的線上 API。
 
 ## API 範例
 
@@ -273,24 +364,49 @@ curl "http://localhost:8000/airport-suggestions?q=tok"
 
 ## Flight Provider 擴充方式
 
-目前 provider 抽象與 mock 實作：
+目前 provider 抽象與實作：
 
-- [flight_provider.py](/tmp/flight-search-mvp/backend/app/providers/flight_provider.py)
-- [mock_provider.py](/tmp/flight-search-mvp/backend/app/providers/mock_provider.py)
+- [flight_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/flight_provider.py)
+- [mock_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/mock_provider.py)
+- [amadeus_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/amadeus_provider.py)
+- [factory.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/factory.py)
 
-未來串接真實 API 的建議做法：
+目前 provider 切換邏輯：
 
-1. 新增 `backend/app/providers/real_provider.py`
-2. 實作 `FlightProvider.search(...)`
-3. 在 `backend/app/main.py` 中把 `MockFlightProvider()` 換成新的 provider
-4. 把 API key 放進 `.env`
+1. `mock`: 永遠使用 mock 資料
+2. `amadeus`: 永遠使用 Amadeus，未設金鑰會直接報錯
+3. `auto`: 優先使用 Amadeus，失敗時退回 mock
 
-目前 mock provider 的新行為：
+Amadeus provider 目前已做的事：
+
+- OAuth client credentials 認證
+- 呼叫 `Flight Offers Search`
+- 解析單程航班資料
+- 維持原本系統的多機場展開、來回自動配對、排序與幣別顯示邏輯
+
+目前 mock provider 的行為：
 
 - 已知 route：優先使用手工 mock 航班資料
 - 未知 route：根據全球機場座標自動生成 synthetic 測試票價
 
-這讓 MVP 即使在還沒接真實 flight API 前，也能測全球城市查詢流程。
+這讓系統在還沒完全切到真實 API 前，也能維持可 demo、可部署、可 fallback。
+
+## 目前「真實」到什麼程度
+
+如果你把 `FLIGHT_PROVIDER` 切成 `amadeus`：
+
+- 航班搜尋結果會來自 Amadeus
+- 航班時間、轉機數、航線會接近真實查詢結果
+- 價格會是 Amadeus 回傳的價格
+
+但目前仍有幾個限制：
+
+- 來回票仍是由本系統把去程 / 回程單程結果自動配對，不是直接用 provider 的完整 round-trip offer
+- 顯示幣別仍透過本地 mock 匯率換算
+- 尚未接 `Flight Offers Price` 做最終 reprice / availability 確認
+- 尚未接 booking deep link
+
+所以這一版已經是「真實查票骨架」，但還不是完整 OTA 等級流程。
 
 ## 測試
 
@@ -311,17 +427,17 @@ python3 -m unittest discover tests
 
 這個工作區目前缺少：
 
-- 無
+- 本機 backend `.venv` 可能需要重新建立
+
 我在這個 session 已經驗證：
 
-- 後端 `11` 個測試通過
-- 前端 `npm run build` 成功
+- 新增 Amadeus provider 後的 Python 語法編譯檢查通過
 
 ## 下一步建議
 
 如果你要做第二版，最值得優先補的會是：
 
 1. 接真實 flight search provider
-2. 接真實 exchange rate API
-3. 支援更多城市與城市群組
+2. 接 `Flight Offers Price` 做 reprice
+3. 接真實 exchange rate API
 4. 加入 airline filters、早去晚回偏好、最大轉機數等條件

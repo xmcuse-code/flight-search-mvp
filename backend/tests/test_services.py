@@ -7,11 +7,14 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import FlightOffer, SearchRequest
+from app.providers.amadeus_provider import AmadeusFlightProvider
+from app.providers.factory import create_flight_provider
 from app.providers.mock_provider import MockFlightProvider
 from app.services.airport_service import AirportExpansionService
 from app.services.currency_service import CurrencyService
 from app.services.search_service import FlightSearchService
 from app.services.sort_service import SortService
+from app.settings import Settings
 
 
 class AirportExpansionServiceTests(unittest.TestCase):
@@ -90,6 +93,14 @@ class SortServiceTests(unittest.TestCase):
 
 
 class SearchApiTests(unittest.TestCase):
+    def test_health_endpoint_exposes_provider_state(self) -> None:
+        client = TestClient(app)
+        response = client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("configured_provider", data)
+        self.assertIn("active_provider", data)
+
     def test_search_endpoint_returns_sorted_results(self) -> None:
         client = TestClient(app)
         payload = {
@@ -207,6 +218,50 @@ class SearchServiceTests(unittest.TestCase):
             if len(offer.segments) == 2 and offer.segments[0].stops != offer.segments[1].stops
         ]
         self.assertGreater(len(mixed_patterns), 0)
+
+
+class ProviderFactoryTests(unittest.TestCase):
+    def test_factory_defaults_to_mock_provider(self) -> None:
+        provider = create_flight_provider(
+            Settings(
+                environment="development",
+                host="0.0.0.0",
+                port=8000,
+                cors_allow_origins=["http://localhost:5173"],
+                flight_provider="mock",
+                amadeus_client_id=None,
+                amadeus_client_secret=None,
+                amadeus_base_url="https://test.api.amadeus.com",
+                amadeus_timeout_seconds=15.0,
+            )
+        )
+        self.assertEqual(provider.provider_name, "mock_flights")
+
+    def test_amadeus_offer_mapping(self) -> None:
+        mapped = AmadeusFlightProvider._map_offer(
+            raw_offer={
+                "itineraries": [
+                    {
+                        "duration": "PT2H45M",
+                        "segments": [
+                            {
+                                "departure": {"iataCode": "NRT", "at": "2026-05-01T09:15:00"},
+                                "arrival": {"iataCode": "TPE", "at": "2026-05-01T12:00:00"},
+                                "carrierCode": "CI",
+                            }
+                        ],
+                    }
+                ],
+                "validatingAirlineCodes": ["CI"],
+                "price": {"grandTotal": "312.40", "currency": "USD"},
+            },
+            provider_name="amadeus_test",
+            carrier_lookup={"CI": "China Airlines"},
+        )
+        self.assertIsNotNone(mapped)
+        self.assertEqual(mapped["airline"], "China Airlines")
+        self.assertEqual(mapped["duration_minutes"], 165)
+        self.assertEqual(mapped["stops"], 0)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,10 @@ from abc import ABC, abstractmethod
 from app.models import SearchRequest
 
 
+class FlightProviderError(RuntimeError):
+    """Raised when a flight provider cannot complete a search request."""
+
+
 class FlightProvider(ABC):
     provider_name: str
 
