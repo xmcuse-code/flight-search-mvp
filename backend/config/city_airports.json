@@ -1,0 +1,11 @@
+{
+  "Wuhan": ["WUH", "CSX", "KHN"],
+  "Beijing": ["PEK", "PKX", "TSN"],
+  "Taipei": ["TPE", "TSA", "KHH"],
+  "Shanghai": ["SHA", "PVG", "HGH"],
+  "Nanjing": ["NKG", "HGH", "WUX"],
+  "Hong Kong": ["HKG", "SZX", "MFM"],
+  "Osaka": ["KIX", "ITM", "UKB"],
+  "Tokyo": ["HND", "NRT", "IBR"],
+  "Seoul": ["ICN", "GMP", "CJJ"]
+}

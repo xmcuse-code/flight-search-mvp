@@ -7,18 +7,30 @@ from pathlib import Path
 from typing import Any
 
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-CONFIG_DIR = BASE_DIR / "config"
+APP_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = APP_DIR.parent
+PROJECT_DIR = BACKEND_DIR.parent
+
+
+def _resolve_config_path(filename: str) -> Path:
+    candidate_paths = [
+        BACKEND_DIR / "config" / filename,
+        PROJECT_DIR / "config" / filename,
+    ]
+    for path in candidate_paths:
+        if path.exists():
+            return path
+    return candidate_paths[0]
 
 
 def _load_json(filename: str) -> dict[str, Any]:
-    path = CONFIG_DIR / filename
+    path = _resolve_config_path(filename)
     with path.open("r", encoding="utf-8") as file:
         return json.load(file)
 
 
 def _load_text(filename: str) -> str:
-    path = CONFIG_DIR / filename
+    path = _resolve_config_path(filename)
     return path.read_text(encoding="utf-8")
 
 
