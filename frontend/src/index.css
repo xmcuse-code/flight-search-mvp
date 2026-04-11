@@ -387,6 +387,18 @@ select {
   gap: 0.95rem;
 }
 
+.results-warning-banner {
+  margin-bottom: 0.95rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid #f0c98a;
+  background: #fff5e6;
+  color: #7a4b00;
+  box-shadow: 0 10px 24px rgba(122, 75, 0, 0.08);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .result-card {
   padding: 1rem;
 }
@@ -428,6 +440,11 @@ select {
 .provider-chip {
   color: #5c6677;
   background: #f2f5f7;
+}
+
+.provider-chip-test {
+  color: #8a4b00;
+  background: #fff1d6;
 }
 
 .route-pill {
@@ -494,6 +511,17 @@ select {
 
 .card-footer {
   margin-top: 1rem;
+}
+
+.provider-warning-inline {
+  flex: 1 1 240px;
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  background: #fff8eb;
+  color: #8a4b00;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .book-link {

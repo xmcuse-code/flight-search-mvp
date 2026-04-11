@@ -1,4 +1,5 @@
 import type { SearchResponse } from "../lib/types";
+import { formatProviderLabel, isTestProvider } from "../lib/provider";
 import { ResultCard } from "./ResultCard";
 
 interface ResultsListProps {
@@ -14,6 +15,9 @@ export function ResultsList({ data }: ResultsListProps) {
     );
   }
 
+  const providers = Array.from(new Set(data.best_results.map((offer) => offer.provider)));
+  const testProviders = providers.filter(isTestProvider);
+
   return (
     <section className="results-section" id="results-section">
       <div className="results-header">
@@ -23,6 +27,12 @@ export function ResultsList({ data }: ResultsListProps) {
         </div>
         <div className="results-count">{data.best_results.length} 筆結果</div>
       </div>
+      {testProviders.length > 0 ? (
+        <div className="results-warning-banner" role="alert">
+          目前顯示的是 {testProviders.map(formatProviderLabel).join(", ")} 測試資料。票價、
+          航班時間與直飛狀態可能不反映真實世界可售班表，請勿直接當成正式查票結果。
+        </div>
+      ) : null}
       <div className="results-summary">
         <div className="summary-card">
           <p className="meta-label">出發機場候選</p>

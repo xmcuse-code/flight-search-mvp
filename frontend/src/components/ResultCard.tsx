@@ -1,4 +1,5 @@
 import type { FlightOffer } from "../lib/types";
+import { formatProviderLabel, isTestProvider } from "../lib/provider";
 
 interface ResultCardProps {
   offer: FlightOffer;
@@ -29,12 +30,16 @@ function formatTripPattern(offer: FlightOffer): string {
 }
 
 export function ResultCard({ offer, rank }: ResultCardProps) {
+  const testProvider = isTestProvider(offer.provider);
+
   return (
     <article className="result-card">
       <div className="card-topline">
         <span className="rank-chip">#{rank}</span>
         {offer.is_best_price ? <span className="best-price-badge">Best Price</span> : null}
-        <span className="provider-chip">{offer.provider}</span>
+        <span className={`provider-chip${testProvider ? " provider-chip-test" : ""}`}>
+          {formatProviderLabel(offer.provider)}
+        </span>
       </div>
 
       <div className="price-row">
@@ -99,6 +104,11 @@ export function ResultCard({ offer, rank }: ResultCardProps) {
             {offer.original_currency} {offer.original_price.toLocaleString()}
           </p>
         </div>
+        {testProvider ? (
+          <div className="provider-warning-inline">
+            測試供應商資料，班表與票價可能不反映真實世界航班。
+          </div>
+        ) : null}
         {offer.purchase_link ? (
           <a
             className="book-link"
