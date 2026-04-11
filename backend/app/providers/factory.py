@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.providers.amadeus_provider import AmadeusFlightProvider
+from app.providers.duffel_provider import DuffelFlightProvider
 from app.providers.flight_provider import FlightProvider, FlightProviderError
 from app.providers.mock_provider import MockFlightProvider
 from app.settings import Settings
@@ -25,7 +26,29 @@ def create_flight_provider(settings: Settings) -> FlightProvider:
     if settings.flight_provider == "mock":
         return MockFlightProvider()
 
+    if settings.flight_provider == "duffel":
+        if not settings.duffel_access_token:
+            raise ValueError(
+                "FLIGHT_PROVIDER=duffel requires DUFFEL_ACCESS_TOKEN to be set."
+            )
+        return DuffelFlightProvider(
+            access_token=settings.duffel_access_token,
+            base_url=settings.duffel_base_url,
+            version=settings.duffel_version,
+            timeout_seconds=settings.duffel_timeout_seconds,
+        )
+
     if settings.flight_provider == "auto":
+        if settings.duffel_access_token:
+            return FallbackFlightProvider(
+                primary=DuffelFlightProvider(
+                    access_token=settings.duffel_access_token,
+                    base_url=settings.duffel_base_url,
+                    version=settings.duffel_version,
+                    timeout_seconds=settings.duffel_timeout_seconds,
+                ),
+                fallback=MockFlightProvider(),
+            )
         if settings.amadeus_client_id and settings.amadeus_client_secret:
             return FallbackFlightProvider(
                 primary=AmadeusFlightProvider(

@@ -17,6 +17,10 @@ class Settings:
     port: int
     cors_allow_origins: list[str]
     flight_provider: str
+    duffel_access_token: str | None
+    duffel_base_url: str
+    duffel_version: str
+    duffel_timeout_seconds: float
     amadeus_client_id: str | None
     amadeus_client_secret: str | None
     amadeus_base_url: str
@@ -29,6 +33,10 @@ def get_settings() -> Settings:
     port = int(os.getenv("PORT") or os.getenv("BACKEND_PORT") or "8000")
     cors_allow_origins = _parse_csv_env(os.getenv("CORS_ALLOW_ORIGINS"))
     flight_provider = os.getenv("FLIGHT_PROVIDER", "mock").strip().lower()
+    duffel_access_token = os.getenv("DUFFEL_ACCESS_TOKEN")
+    duffel_base_url = os.getenv("DUFFEL_BASE_URL", "https://api.duffel.com").rstrip("/")
+    duffel_version = os.getenv("DUFFEL_VERSION", "v2").strip()
+    duffel_timeout_seconds = float(os.getenv("DUFFEL_TIMEOUT_SECONDS", "20"))
     amadeus_client_id = os.getenv("AMADEUS_CLIENT_ID")
     amadeus_client_secret = os.getenv("AMADEUS_CLIENT_SECRET")
     amadeus_base_url = os.getenv(
@@ -37,9 +45,9 @@ def get_settings() -> Settings:
     ).rstrip("/")
     amadeus_timeout_seconds = float(os.getenv("AMADEUS_TIMEOUT_SECONDS", "15"))
 
-    if flight_provider not in {"mock", "amadeus", "auto"}:
+    if flight_provider not in {"mock", "duffel", "amadeus", "auto"}:
         raise ValueError(
-            "FLIGHT_PROVIDER must be one of: mock, amadeus, auto"
+            "FLIGHT_PROVIDER must be one of: mock, duffel, amadeus, auto"
         )
 
     if not cors_allow_origins:
@@ -58,6 +66,10 @@ def get_settings() -> Settings:
         port=port,
         cors_allow_origins=cors_allow_origins,
         flight_provider=flight_provider,
+        duffel_access_token=duffel_access_token.strip() if duffel_access_token else None,
+        duffel_base_url=duffel_base_url,
+        duffel_version=duffel_version,
+        duffel_timeout_seconds=duffel_timeout_seconds,
         amadeus_client_id=amadeus_client_id.strip() if amadeus_client_id else None,
         amadeus_client_secret=(
             amadeus_client_secret.strip() if amadeus_client_secret else None

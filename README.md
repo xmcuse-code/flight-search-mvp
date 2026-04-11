@@ -13,7 +13,7 @@
 
 - Frontend: React + Vite + TypeScript
 - Backend: FastAPI
-- Flight data: Mock provider / Amadeus provider
+- Flight data: Mock provider / Duffel provider / Amadeus provider
 - Exchange rate: Mock currency service
 - Airport catalog: OpenFlights global airport dataset
 
@@ -80,20 +80,22 @@ flight-search-mvp/
 ### 目前仍是 Mock
 
 - 如果 `FLIGHT_PROVIDER=mock`，航班資料、時間、價格都仍是 mock / synthetic
-- 即使切到 `FLIGHT_PROVIDER=amadeus`，匯率目前仍是 mock exchange rate
+- 即使切到 `FLIGHT_PROVIDER=duffel` 或 `amadeus`，匯率目前仍是 mock exchange rate
 - 真實購票 deep link 目前尚未接入
 - 真實城市地理擴展演算法仍是簡化版
 
 ### 已支援真實 Flight API 骨架
 
-- `AmadeusFlightProvider` 已加入 backend
+- `DuffelFlightProvider` 與 `AmadeusFlightProvider` 都已加入 backend
 - 可透過環境變數切換：
   - `FLIGHT_PROVIDER=mock`
+  - `FLIGHT_PROVIDER=duffel`
   - `FLIGHT_PROVIDER=amadeus`
   - `FLIGHT_PROVIDER=auto`
 - `auto` 模式下：
-  - 若有 Amadeus 金鑰，優先查真實資料
-  - 若 Amadeus 失敗，會 fallback 到 mock
+  - 若有 Duffel token，優先查真實資料
+  - 若沒有 Duffel 但有 Amadeus 金鑰，則使用 Amadeus
+  - 若真實 provider 失敗，會 fallback 到 mock
 
 ## 快速啟動
 
@@ -111,7 +113,17 @@ flight-search-mvp/
 cp .env.example .env
 ```
 
-如果你要啟用真實航班資料，請先到 [Amadeus for Developers](https://developers.amadeus.com/) 申請 API Key，然後把 `.env` 補上：
+如果你要啟用真實航班資料，建議先到 [Duffel Dashboard](https://app.duffel.com/) 建立 test access token，然後把 `.env` 補上：
+
+```bash
+FLIGHT_PROVIDER=duffel
+DUFFEL_ACCESS_TOKEN=your_test_token
+DUFFEL_BASE_URL=https://api.duffel.com
+DUFFEL_VERSION=v2
+DUFFEL_TIMEOUT_SECONDS=20
+```
+
+如果你已經有舊的 Amadeus key，也仍可使用：
 
 ```bash
 FLIGHT_PROVIDER=amadeus
@@ -127,7 +139,7 @@ AMADEUS_TIMEOUT_SECONDS=15
 FLIGHT_PROVIDER=auto
 ```
 
-這樣有金鑰時會查 Amadeus，沒有金鑰或遠端失敗時則回退到 mock。
+這樣有 Duffel token 時會先查 Duffel；沒有 Duffel 時再看 Amadeus；若真實 provider 失敗則回退到 mock。
 
 ## 2. 啟動 Backend
 
@@ -155,8 +167,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 {
   "status": "ok",
   "environment": "development",
-  "configured_provider": "amadeus",
-  "active_provider": "amadeus_test"
+  "configured_provider": "duffel",
+  "active_provider": "duffel_test"
 }
 ```
 
@@ -173,9 +185,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 APP_ENV=production
 CORS_ALLOW_ORIGINS=https://your-frontend-domain.vercel.app
-FLIGHT_PROVIDER=amadeus
-AMADEUS_CLIENT_ID=your_client_id
-AMADEUS_CLIENT_SECRET=your_client_secret
+FLIGHT_PROVIDER=duffel
+DUFFEL_ACCESS_TOKEN=your_test_token
 ```
 
 如果平台要你手動填 Start Command，請用：
@@ -368,14 +379,23 @@ curl "http://localhost:8000/airport-suggestions?q=tok"
 
 - [flight_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/flight_provider.py)
 - [mock_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/mock_provider.py)
+- [duffel_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/duffel_provider.py)
 - [amadeus_provider.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/amadeus_provider.py)
 - [factory.py](/Users/ming-jiehsieh/Desktop/flight-search-mvp/backend/app/providers/factory.py)
 
 目前 provider 切換邏輯：
 
 1. `mock`: 永遠使用 mock 資料
-2. `amadeus`: 永遠使用 Amadeus，未設金鑰會直接報錯
-3. `auto`: 優先使用 Amadeus，失敗時退回 mock
+2. `duffel`: 永遠使用 Duffel，未設 token 會直接報錯
+3. `amadeus`: 永遠使用 Amadeus，未設金鑰會直接報錯
+4. `auto`: 先 Duffel，再 Amadeus，最後退回 mock
+
+Duffel provider 目前已做的事：
+
+- Bearer token 驗證
+- 呼叫 `POST /air/offer_requests`
+- 直接回收 one-way offers
+- 解析 airline、起降時間、航程長度、轉機數與價格
 
 Amadeus provider 目前已做的事：
 
@@ -393,11 +413,11 @@ Amadeus provider 目前已做的事：
 
 ## 目前「真實」到什麼程度
 
-如果你把 `FLIGHT_PROVIDER` 切成 `amadeus`：
+如果你把 `FLIGHT_PROVIDER` 切成 `duffel` 或 `amadeus`：
 
-- 航班搜尋結果會來自 Amadeus
+- 航班搜尋結果會來自真實 provider
 - 航班時間、轉機數、航線會接近真實查詢結果
-- 價格會是 Amadeus 回傳的價格
+- 價格會是 provider 回傳的價格
 
 但目前仍有幾個限制：
 
@@ -431,7 +451,7 @@ python3 -m unittest discover tests
 
 我在這個 session 已經驗證：
 
-- 新增 Amadeus provider 後的 Python 語法編譯檢查通過
+- 新增真實 provider 後的 Python 語法編譯檢查通過
 
 ## 下一步建議
 

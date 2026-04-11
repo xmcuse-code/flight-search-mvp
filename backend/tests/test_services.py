@@ -9,6 +9,7 @@ from app.main import app
 from app.models import FlightOffer, SearchRequest
 from app.providers.amadeus_provider import AmadeusFlightProvider
 from app.providers.factory import create_flight_provider
+from app.providers.duffel_provider import DuffelFlightProvider
 from app.providers.mock_provider import MockFlightProvider
 from app.services.airport_service import AirportExpansionService
 from app.services.currency_service import CurrencyService
@@ -229,6 +230,10 @@ class ProviderFactoryTests(unittest.TestCase):
                 port=8000,
                 cors_allow_origins=["http://localhost:5173"],
                 flight_provider="mock",
+                duffel_access_token=None,
+                duffel_base_url="https://api.duffel.com",
+                duffel_version="v2",
+                duffel_timeout_seconds=20.0,
                 amadeus_client_id=None,
                 amadeus_client_secret=None,
                 amadeus_base_url="https://test.api.amadeus.com",
@@ -260,6 +265,54 @@ class ProviderFactoryTests(unittest.TestCase):
         )
         self.assertIsNotNone(mapped)
         self.assertEqual(mapped["airline"], "China Airlines")
+        self.assertEqual(mapped["duration_minutes"], 165)
+        self.assertEqual(mapped["stops"], 0)
+
+    def test_factory_can_build_duffel_provider(self) -> None:
+        provider = create_flight_provider(
+            Settings(
+                environment="development",
+                host="0.0.0.0",
+                port=8000,
+                cors_allow_origins=["http://localhost:5173"],
+                flight_provider="duffel",
+                duffel_access_token="test_token",
+                duffel_base_url="https://api.duffel.com",
+                duffel_version="v2",
+                duffel_timeout_seconds=20.0,
+                amadeus_client_id=None,
+                amadeus_client_secret=None,
+                amadeus_base_url="https://test.api.amadeus.com",
+                amadeus_timeout_seconds=15.0,
+            )
+        )
+        self.assertEqual(provider.provider_name, "duffel_test")
+
+    def test_duffel_offer_mapping(self) -> None:
+        mapped = DuffelFlightProvider._map_offer(
+            {
+                "total_amount": "312.40",
+                "total_currency": "USD",
+                "slices": [
+                    {
+                        "segments": [
+                            {
+                                "departing_at": "2026-05-01T09:15:00Z",
+                                "arriving_at": "2026-05-01T12:00:00Z",
+                                "origin": {"iata_code": "NRT"},
+                                "destination": {"iata_code": "TPE"},
+                                "operating_carrier": {"name": "China Airlines"},
+                            }
+                        ]
+                    }
+                ],
+            },
+            "duffel_test",
+        )
+        self.assertIsNotNone(mapped)
+        self.assertEqual(mapped["airline"], "China Airlines")
+        self.assertEqual(mapped["origin_airport"], "NRT")
+        self.assertEqual(mapped["destination_airport"], "TPE")
         self.assertEqual(mapped["duration_minutes"], 165)
         self.assertEqual(mapped["stops"], 0)
 
